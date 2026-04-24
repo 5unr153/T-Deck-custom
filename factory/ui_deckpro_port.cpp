@@ -593,6 +593,221 @@ const char* ui_sd_read_file(const char *path)
     return buffer;
 }
 
+// Глобальное состояние ридера
+static sd_reader_state_t reader_state = {0};
+static File current_file;
+static char read_buffer[4096];  // Буфер для чтения (4KB)
+static bool file_opened = false;
+
+// Имя файла для сохранения состояния (на SD)
+#define READER_STATE_FILE "/.reader_state.dat"
+
+// Сохранить состояние на SD
+bool sd_reader_save_state(void)
+{
+    if (!ui_test_sd_card()) return false;
+    
+    shared_spi_lock();
+    shared_spi_prepare_device(BOARD_SD_CS);
+    
+    File state_file = SD.open(READER_STATE_FILE, FILE_WRITE);
+    if (!state_file) {
+        shared_spi_unlock();
+        return false;
+    }
+    
+    size_t written = state_file.write((uint8_t*)&reader_state, sizeof(reader_state));
+    state_file.close();
+    
+    shared_spi_unlock();
+    
+    Serial.printf("[SD Reader] State saved: offset=%d, total=%d\n", 
+                  reader_state.offset, reader_state.total_size);
+    
+    return (written == sizeof(reader_state));
+}
+
+// Загрузить состояние с SD
+bool sd_reader_load_state(const char *path)
+{
+    if (!ui_test_sd_card()) return false;
+    
+    shared_spi_lock();
+    shared_spi_prepare_device(BOARD_SD_CS);
+    
+    File state_file = SD.open(READER_STATE_FILE, FILE_READ);
+    if (!state_file) {
+        shared_spi_unlock();
+        return false;
+    }
+    
+    sd_reader_state_t loaded_state;
+    size_t read_bytes = state_file.read((uint8_t*)&loaded_state, sizeof(loaded_state));
+    state_file.close();
+    
+    shared_spi_unlock();
+    
+    if (read_bytes != sizeof(loaded_state)) {
+        return false;
+    }
+    
+    // Проверяем, что это тот же файл
+    if (strcmp(loaded_state.file_path, path) == 0) {
+        memcpy(&reader_state, &loaded_state, sizeof(reader_state));
+        Serial.printf("[SD Reader] State loaded: offset=%d, total=%d\n", 
+                      reader_state.offset, reader_state.total_size);
+        return true;
+    }
+    
+    return false;
+}
+
+// Открыть файл для резидентового чтения
+bool sd_reader_open(const char *path)
+{
+    if (!path || !ui_test_sd_card()) {
+        Serial.println("[SD Reader] Invalid path or no SD card");
+        return false;
+    }
+    
+    // Закрываем предыдущий файл если открыт
+    if (file_opened) {
+        sd_reader_close();
+    }
+    
+    shared_spi_lock();
+    shared_spi_prepare_device(BOARD_SD_CS);
+    
+    // Открываем файл
+    current_file = SD.open(path, FILE_READ);
+    if (!current_file) {
+        Serial.printf("[SD Reader] Cannot open: %s\n", path);
+        shared_spi_unlock();
+        return false;
+    }
+    
+    // Сохраняем информацию
+    strncpy(reader_state.file_path, path, sizeof(reader_state.file_path) - 1);
+    reader_state.total_size = current_file.size();
+    reader_state.last_update = millis();
+    
+    // Пытаемся загрузить сохранённое состояние
+    if (!sd_reader_load_state(path)) {
+        // Если нет сохранённого состояния, начинаем с начала
+        reader_state.offset = 0;
+        reader_state.is_open = true;
+        sd_reader_save_state();  // Сохраняем начальное состояние
+    }
+    
+    // Перемещаемся на сохранённую позицию
+    if (reader_state.offset > 0) {
+        current_file.seek(reader_state.offset);
+        Serial.printf("[SD Reader] Resumed at offset: %d\n", reader_state.offset);
+    }
+    
+    reader_state.is_open = true;
+    file_opened = true;
+    
+    shared_spi_unlock();
+    
+    Serial.printf("[SD Reader] Opened: %s, size=%d, resume at=%d\n", 
+                  path, reader_state.total_size, reader_state.offset);
+    
+    return true;
+}
+
+// Закрыть файл (сохраняет состояние)
+void sd_reader_close(void)
+{
+    if (!file_opened) return;
+    
+    shared_spi_lock();
+    shared_spi_prepare_device(BOARD_SD_CS);
+    
+    if (current_file) {
+        // Сохраняем финальное состояние перед закрытием
+        reader_state.is_open = false;
+        sd_reader_save_state();
+        current_file.close();
+    }
+    
+    file_opened = false;
+    memset(&reader_state, 0, sizeof(reader_state));
+    
+    shared_spi_unlock();
+    
+    Serial.println("[SD Reader] Closed");
+}
+
+// Прочитать кусок файла (возвращает указатель на буфер)
+const char* sd_reader_read_chunk(size_t chunk_size)
+{
+    if (!file_opened || !current_file) {
+        Serial.println("[SD Reader] File not open");
+        return NULL;
+    }
+    
+    if (chunk_size > sizeof(read_buffer) - 1) {
+        chunk_size = sizeof(read_buffer) - 1;
+    }
+    
+    shared_spi_lock();
+    shared_spi_prepare_device(BOARD_SD_CS);
+    
+    // Читаем данные
+    size_t bytes_read = current_file.readBytes(read_buffer, chunk_size);
+    
+    if (bytes_read > 0) {
+        read_buffer[bytes_read] = '\0';
+        reader_state.offset += bytes_read;
+        reader_state.last_update = millis();
+        
+        // Сохраняем состояние каждые 5 прочитанных кусков или каждые 10 секунд
+        static int read_count = 0;
+        read_count++;
+        if (read_count >= 5 || (millis() - reader_state.last_update) > 10000) {
+            sd_reader_save_state();
+            read_count = 0;
+        }
+        
+        Serial.printf("[SD Reader] Read %d bytes, offset=%d/%d\n", 
+                      bytes_read, reader_state.offset, reader_state.total_size);
+    }
+    
+    shared_spi_unlock();
+    
+    return (bytes_read > 0) ? read_buffer : NULL;
+}
+
+// Получить текущую позицию
+size_t sd_reader_get_position(void)
+{
+    return reader_state.offset;
+}
+
+// Получить общий размер
+size_t sd_reader_get_total(void)
+{
+    return reader_state.total_size;
+}
+
+// Проверить, достигнут ли конец файла
+bool sd_reader_is_eof(void)
+{
+    return (file_opened && reader_state.offset >= reader_state.total_size);
+}
+
+// Сбросить прогресс чтения (начать сначала)
+void sd_reader_reset(void)
+{
+    if (file_opened && current_file) {
+        reader_state.offset = 0;
+        current_file.seek(0);
+        sd_reader_save_state();
+        Serial.println("[SD Reader] Reset to beginning");
+    }
+}
+
 // void audio_id3data(const char *info){  //id3 metadata
 //     Serial.print("id3data     ");Serial.println(info);
 // }
