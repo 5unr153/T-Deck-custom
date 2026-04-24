@@ -262,12 +262,12 @@ static struct menu_btn menu_btn_list[] =
     {SCREEN4_ID,  &img_wifi,    "Wifi",     23,     101},
     {SCREEN5_ID,  &img_test,    "Test",     95,     101},
     {SCREEN6_ID,  &img_batt,    "Battery",  167,    101},
-    {SCREEN7_ID,  &img_touch,   "Input",    23,     189},
+    {SCREEN7_ID,  &img_SD,      "SD Card",  23,     189},
     {SCREEN8_ID,  &img_A7682E,  "A7682E",   95,     189},
     {SCREEN9_ID,  &img_lora,    "Shutdown", 167,    189},
     {SCREEN10_ID, &img_PCM5102, "PCM5102",  23,     13},  // Page two
     {SCREEN11_ID, &img_PCM5102, "Sleep",    95,     13},  // 
-    {SCREEN12_ID, &img_SD, "SD Card", 23, 189},
+
 };
 
 static void menu_btn_event_cb(lv_event_t *e)
@@ -2105,14 +2105,11 @@ static scr_lifecycle_t screen6_2 = {
 };
 #undef line_max
 #endif
-//************************************[ screen 7 ]****************************************** Other
+
+//************************************[ screen 7 ]****************************************** SD Card Browser
 #if 1
-static lv_obj_t *scr7_cont;
-static lv_obj_t *input_touch;
-static lv_obj_t *input_keypad;
-static lv_obj_t *gyroscope;
-static lv_timer_t *input_timer;
-static String keypad_str = "Keypad: \n";
+static lv_obj_t *scr7_list;
+static lv_obj_t *scr7_status_label;
 
 static void scr7_btn_event_cb(lv_event_t * e)
 {
@@ -2121,108 +2118,98 @@ static void scr7_btn_event_cb(lv_event_t * e)
     }
 }
 
-static void input_timer_event(lv_timer_t *t)
+static void scr7_file_click_cb(lv_event_t *e)
 {
-    int touch_x, touch_y;
-    static int sec = 0;
-    float gyro_x, gyro_y, gyro_z;
-    char keypay_v;
+    char *path = (char*)lv_event_get_user_data(e);
+    if (!path) return;
+    
+    // Сохраняем путь в глобальную переменную для следующего экрана
+    // (или передаём через user_data при push)
+    selected_file_path = path;
+    
+    // Переходим на экран просмотра
+    scr_mgr_push(SCREEN7_1_ID, false);
+}
 
-    int ret = ui_input_get_touch_coord(&touch_x, &touch_y);
-
-    if(ret > 0)
-    {
-        lv_label_set_text_fmt(input_touch,  "Touch: x: %03d | y: %03d", touch_x, touch_y);
-
-        sec = 0;
+static void scr7_refresh_list(lv_obj_t *parent)
+{
+    // Очищаем список
+    while(lv_obj_get_child_cnt(scr7_list) > 0) {
+        lv_obj_del(lv_obj_get_child(scr7_list, 0));
     }
-
-    ret = ui_input_get_keypay_val(&keypay_v);
-    if(ret > 0)
-    {
-        ui_input_set_keypay_flag();
-        keypad_str = keypad_str + String(keypay_v);
-        lv_label_set_text_fmt(input_keypad, "%s", keypad_str.c_str());
-
-        sec = 0;
+    
+    lv_label_set_text(scr7_status_label, "Scanning SD card...");
+    ui_disp_full_refr();
+    
+    // Получаем список файлов
+    char *file_names[30] = {0};
+    char buffers[30][64];
+    for(int i = 0; i < 30; i++) {
+        buffers[i][0] = '\0';
+        file_names[i] = buffers[i];
     }
+    
+    ui_sd_get_file_list(file_names, 30);
+    
+    // Создаём кнопки для каждого файла
+    int file_count = 0;
+    for(int i = 0; i < 30; i++) {
+        if (file_names[i][0] == '\0') break;
+        file_count++;
+        
+        // Получаем размер файла для отображения
+        size_t fsize = ui_sd_get_file_size(file_names[i]);
 
-    sec++;
-    if(sec > 60) // 2s
-    {
-        sec = 0;
-
-        ui_other_get_gyro(&gyro_x, &gyro_y, &gyro_z);
-        lv_label_set_text_fmt(gyroscope,    "   gyros_x: %.3f\n"
-                                            "   gyros_y: %.3f\n"
-                                            "   gyros_z: %.3f", gyro_x, gyro_y, gyro_z);
+        // Формируем строку: имя файла + размер
+        char display_name[80];
+        snprintf(display_name, 80, "%s", file_names[i] + 1);
+        
+        lv_obj_t *btn = lv_list_add_btn(scr7_list, LV_SYMBOL_FILE, display_name);
+        lv_obj_set_height(btn, 25);
+        lv_obj_set_style_text_font(btn, FONT_BOLD_SIZE_14, LV_PART_MAIN);
+        
+        // Сохраняем полный путь
+        char *path_copy = (char*)lv_mem_alloc(strlen(file_names[i]) + 1);
+        strcpy(path_copy, file_names[i]);
+        lv_obj_add_event_cb(btn, scr7_file_click_cb, LV_EVENT_CLICKED, path_copy);
     }
+    
+    lv_label_set_text_fmt(scr7_status_label, "%d files", file_count);
+    ui_disp_full_refr();
 }
 
 static void create7(lv_obj_t *parent) 
 {
-    scr7_cont = lv_obj_create(parent);
-    lv_obj_set_size(scr7_cont, lv_pct(100), lv_pct(88));
-    lv_obj_set_style_bg_color(scr7_cont, DECKPRO_COLOR_BG, LV_PART_MAIN);
-    lv_obj_set_scrollbar_mode(scr7_cont, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_clear_flag(scr7_cont, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_width(scr7_cont, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(scr7_cont, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_left(scr7_cont, 13, LV_PART_MAIN);
-    lv_obj_set_flex_flow(scr7_cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(scr7_cont, 10, LV_PART_MAIN);
-    lv_obj_set_style_pad_column(scr7_cont, 5, LV_PART_MAIN);
-    lv_obj_set_align(scr7_cont, LV_ALIGN_BOTTOM_MID);
+    
+    // Статусная строка
+    scr7_status_label = lv_label_create(parent);
+    lv_label_set_text(scr7_status_label, "Initializing...");
+    lv_obj_set_style_text_font(scr7_status_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
+    lv_obj_align(scr7_status_label, LV_ALIGN_TOP_LEFT, 10, 35);
+    
+    // Список файлов
+    scr7_list = lv_list_create(parent);
+    lv_obj_set_size(scr7_list, LV_HOR_RES - 10, lv_pct(70));
+    lv_obj_align(scr7_list, LV_ALIGN_TOP_MID, 0, 60);
+    lv_obj_set_style_bg_color(scr7_list, DECKPRO_COLOR_BG, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(scr7_list, 5, LV_PART_MAIN);
+    lv_obj_set_style_pad_row(scr7_list, 3, LV_PART_MAIN);
+    
+    lv_obj_t *back7_label = scr_back_btn_create(parent, ("SD Card"), scr7_btn_event_cb);
 
-    input_touch = lv_label_create(scr7_cont);
-    // lv_obj_set_height(input_touch, 90);
-    lv_obj_set_width(input_touch, lv_pct(95));
-    lv_obj_set_style_pad_all(input_touch, 0, LV_PART_MAIN);
-    lv_obj_set_style_text_font(input_touch, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
-    // lv_obj_set_style_border_width(input_touch, 1, LV_PART_MAIN);
-    lv_label_set_long_mode(input_touch, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(input_touch,  "Touch: x:     | y:    ");
-
-    input_keypad = lv_label_create(scr7_cont);
-    // lv_obj_set_height(input_keypad, 100);
-    lv_obj_set_width(input_keypad, lv_pct(95));
-    lv_obj_set_style_pad_all(input_keypad, 0, LV_PART_MAIN);
-    lv_obj_set_style_text_font(input_keypad, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
-    // lv_obj_set_style_border_width(input_keypad, 1, LV_PART_MAIN);
-    lv_label_set_long_mode(input_keypad, LV_LABEL_LONG_WRAP);
-    lv_label_set_text_fmt(input_keypad, "Keypad: ");
-
-    lv_obj_t *lab2 = lv_label_create(scr7_cont);
-    lv_obj_set_style_text_font(lab2, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
-    lv_label_set_text(lab2, "gyroscope");
-
-    gyroscope = lv_label_create(scr7_cont);
-    // lv_obj_set_height(input_keypad, 100);
-    lv_obj_set_width(gyroscope, lv_pct(95));
-    lv_obj_set_style_pad_all(gyroscope, 0, LV_PART_MAIN);
-    lv_obj_set_style_text_font(gyroscope, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
-    // lv_obj_set_style_border_width(gyroscope, 1, LV_PART_MAIN);
-    lv_label_set_long_mode(gyroscope, LV_LABEL_LONG_WRAP);
-    lv_label_set_text_fmt(gyroscope,    "   gyros_x: 000\n"
-                                        "   gyros_y: 000\n"
-                                        "   gyros_z: 000");
-
-    lv_obj_t *back7_label = scr_back_btn_create(parent, ("Other"), scr7_btn_event_cb);
 }
+
 static void entry7(void) 
 {
-    keypad_str = "Keypad: \n";
+    // Обновляем список ОДИН РАЗ при входе
+    scr7_refresh_list(lv_scr_act());
     ui_disp_full_refr();
-    input_timer = lv_timer_create(input_timer_event, 50, NULL);
 }
+
 static void exit7(void) {
-    if(input_timer)
-    {
-        lv_timer_del(input_timer);
-        input_timer = NULL;
-    }
     ui_disp_full_refr();
 }
+
 static void destroy7(void) { }
 
 static scr_lifecycle_t screen7 = {
@@ -2232,6 +2219,168 @@ static scr_lifecycle_t screen7 = {
     .destroy = destroy7,
 };
 #endif
+// --------------------- screen 13 --------------------- SD File Viewer
+#if 1
+static lv_obj_t *scr_reader_textarea;
+static lv_obj_t *scr_reader_status_label;
+
+static void scr_reader_btn_event_cb(lv_event_t * e)
+{
+    if(e->code == LV_EVENT_CLICKED){
+        scr_mgr_pop(false);
+    }
+}
+
+static void scr_reader_scroll_up_cb(lv_event_t *e)
+{
+    lv_obj_scroll_by(scr_reader_textarea, 0, -40, LV_ANIM_ON);
+    ui_disp_full_refr();
+}
+
+static void scr_reader_scroll_down_cb(lv_event_t *e)
+{
+    lv_obj_scroll_by(scr_reader_textarea, 0, 40, LV_ANIM_ON);
+    ui_disp_full_refr();
+}
+
+static void scr_reader_scroll_top_cb(lv_event_t *e)
+{
+    lv_obj_scroll_to_y(scr_reader_textarea, 0, LV_ANIM_ON);
+    ui_disp_full_refr();
+}
+
+static void scr_reader_scroll_bottom_cb(lv_event_t *e)
+{
+    lv_obj_scroll_to_y(scr_reader_textarea, LV_COORD_MAX, LV_ANIM_ON);
+    ui_disp_full_refr();
+}
+
+static void create_reader(lv_obj_t *parent) 
+{
+    // Настройки родителя - отключаем его прокрутку
+    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // Статусная строка
+    scr_reader_status_label = lv_label_create(parent);
+    lv_obj_set_style_text_font(scr_reader_status_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
+    lv_obj_align(scr_reader_status_label, LV_ALIGN_BOTTOM_LEFT, 10, 0);
+    
+    // Текстовая область
+    scr_reader_textarea = lv_textarea_create(parent);
+    lv_obj_set_width(scr_reader_textarea, LV_HOR_RES - 20);
+    lv_obj_set_height(scr_reader_textarea, LV_VER_RES - 100);
+    lv_obj_align(scr_reader_textarea, LV_ALIGN_TOP_MID, 0, 30);
+    
+    // Настройки textarea
+    lv_textarea_set_text(scr_reader_textarea, "Loading...");  // Только чтение
+    lv_textarea_set_one_line(scr_reader_textarea, false);     // Многострочный
+    
+    // Включаем прокрутку
+    lv_obj_set_scrollbar_mode(scr_reader_textarea, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scroll_dir(scr_reader_textarea, LV_DIR_VER);
+    
+    // Стиль
+    lv_obj_set_style_text_font(scr_reader_textarea, FONT_BOLD_SIZE_14, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(scr_reader_textarea, 10, LV_PART_MAIN);
+    
+    // Кнопка Back
+    lv_obj_t *back13_label = scr_back_btn_create(parent, ("File"), scr_reader_btn_event_cb);
+    
+    // Кнопки прокрутки (для EPD удобнее чем жесты)
+    lv_obj_t *up_btn = lv_btn_create(parent);
+    lv_obj_set_size(up_btn, 35, 35);
+    lv_obj_align(up_btn, LV_ALIGN_BOTTOM_LEFT, 10, -35);
+    lv_obj_t *up_label = lv_label_create(up_btn);
+    lv_label_set_text(up_label, LV_SYMBOL_UP);
+    lv_obj_center(up_label);
+    lv_obj_add_event_cb(up_btn, scr_reader_scroll_up_cb, LV_EVENT_CLICKED, NULL);
+    
+    lv_obj_t *down_btn = lv_btn_create(parent);
+    lv_obj_set_size(down_btn, 35, 35);
+    lv_obj_align(down_btn, LV_ALIGN_BOTTOM_LEFT, 55, -35);
+    lv_obj_t *down_label = lv_label_create(down_btn);
+    lv_label_set_text(down_label, LV_SYMBOL_DOWN);
+    lv_obj_center(down_label);
+    lv_obj_add_event_cb(down_btn, scr_reader_scroll_down_cb, LV_EVENT_CLICKED, NULL);
+    
+    lv_obj_t *top_btn = lv_btn_create(parent);
+    lv_obj_set_size(top_btn, 35, 35);
+    lv_obj_align(top_btn, LV_ALIGN_BOTTOM_LEFT, 100, -35);
+    lv_obj_t *top_label = lv_label_create(top_btn);
+    lv_label_set_text(top_label, "Top");
+    lv_obj_set_style_text_font(top_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
+    lv_obj_center(top_label);
+    lv_obj_add_event_cb(top_btn, scr_reader_scroll_top_cb, LV_EVENT_CLICKED, NULL);
+    
+    lv_obj_t *bottom_btn = lv_btn_create(parent);
+    lv_obj_set_size(bottom_btn, 45, 35);
+    lv_obj_align(bottom_btn, LV_ALIGN_BOTTOM_LEFT, 145, -35);
+    lv_obj_t *bottom_label = lv_label_create(bottom_btn);
+    lv_label_set_text(bottom_label, "End");
+    lv_obj_set_style_text_font(bottom_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
+    lv_obj_center(bottom_label);
+    lv_obj_add_event_cb(bottom_btn, scr_reader_scroll_bottom_cb, LV_EVENT_CLICKED, NULL);
+}
+
+static void entry_reader(void) 
+{
+    if (!selected_file_path) {
+        lv_label_set_text(scr_reader_status_label, "Error: No file selected");
+        lv_textarea_set_text(scr_reader_textarea, "Please select a file first.");
+        ui_disp_full_refr();
+        return;
+    }
+    
+    // Получаем размер файла
+    size_t file_size = ui_sd_get_file_size(selected_file_path);
+    
+    // Статус
+    lv_label_set_text_fmt(scr_reader_status_label, "File: %s (%d bytes)", 
+                          selected_file_path + 1, file_size);
+    lv_textarea_set_text(scr_reader_textarea, "Loading...");
+    ui_disp_full_refr();
+    
+    // Читаем файл
+    const char *content = ui_sd_read_file(selected_file_path);
+    
+    // Ограничиваем для производительности EPD
+    const size_t MAX_DISPLAY = 4000;
+    if (strlen(content) > MAX_DISPLAY) {
+        char *truncated = (char*)malloc(MAX_DISPLAY + 200);
+        if (truncated) {
+            strncpy(truncated, content, MAX_DISPLAY);
+            truncated[MAX_DISPLAY] = '\0';
+            strcat(truncated, "\n\n... (file truncated, too large for EPD)");
+            lv_textarea_set_text(scr_reader_textarea, truncated);
+            free(truncated);
+        } else {
+            lv_textarea_set_text(scr_reader_textarea, content);
+        }
+    } else {
+        lv_textarea_set_text(scr_reader_textarea, content);
+    }
+    
+    // Прокрутка в начало
+    lv_obj_scroll_to_y(scr_reader_textarea, 0, LV_ANIM_OFF);
+    
+    ui_disp_full_refr();
+}
+
+static void exit_reader(void) {
+    ui_disp_full_refr();
+}
+
+static void destroy_reader(void) { }
+
+static scr_lifecycle_t screen_reader = {
+    .create = create_reader,
+    .entry = entry_reader,
+    .exit  = exit_reader,
+    .destroy = destroy_reader,
+};
+#endif
+
 //************************************[ screen 8 ]****************************************** A7682E
 // --------------------- screen 8 --------------------- A7682E
 #if 1
@@ -2893,306 +3042,7 @@ static scr_lifecycle_t screen11 = {
 };
 #endif
 
-// --------------------- screen 12 --------------------- SD Card Browser
-#if 1
-static lv_obj_t *scr12_list;
-static lv_obj_t *scr12_status_label;
 
-static void scr12_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
-
-static void scr12_file_click_cb(lv_event_t *e)
-{
-    char *path = (char*)lv_event_get_user_data(e);
-    if (!path) return;
-    
-    // Сохраняем путь в глобальную переменную для следующего экрана
-    // (или передаём через user_data при push)
-    selected_file_path = path;
-    
-    // Переходим на экран просмотра
-    scr_mgr_push(SCREEN13_ID, false);
-}
-
-static void scr12_refresh_list(lv_obj_t *parent)
-{
-    // Очищаем список
-    while(lv_obj_get_child_cnt(scr12_list) > 0) {
-        lv_obj_del(lv_obj_get_child(scr12_list, 0));
-    }
-    
-    lv_label_set_text(scr12_status_label, "Scanning SD card...");
-    ui_disp_full_refr();
-    
-    // Получаем список файлов
-    char *file_names[30] = {0};
-    char buffers[30][64];
-    for(int i = 0; i < 30; i++) {
-        buffers[i][0] = '\0';
-        file_names[i] = buffers[i];
-    }
-    
-    ui_sd_get_file_list(file_names, 30);
-    
-    // Создаём кнопки для каждого файла
-    int file_count = 0;
-    for(int i = 0; i < 30; i++) {
-        if (file_names[i][0] == '\0') break;
-        file_count++;
-        
-        // Получаем размер файла для отображения
-        size_t fsize = ui_sd_get_file_size(file_names[i]);
-        char size_str[16];
-        if (fsize < 1024) {
-            snprintf(size_str, 16, "%d B", (int)fsize);
-        } else if (fsize < 1024*1024) {
-            snprintf(size_str, 16, "%d KB", (int)(fsize/1024));
-        } else {
-            snprintf(size_str, 16, "%d MB", (int)(fsize/(1024*1024)));
-        }
-        
-        // Формируем строку: имя файла + размер
-        char display_name[80];
-        snprintf(display_name, 80, "%s  [%s]", file_names[i] + 1, size_str);
-        
-        lv_obj_t *btn = lv_list_add_btn(scr12_list, LV_SYMBOL_FILE, display_name);
-        lv_obj_set_height(btn, 40);
-        lv_obj_set_style_text_font(btn, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-        
-        // Сохраняем полный путь
-        char *path_copy = (char*)lv_mem_alloc(strlen(file_names[i]) + 1);
-        strcpy(path_copy, file_names[i]);
-        lv_obj_add_event_cb(btn, scr12_file_click_cb, LV_EVENT_CLICKED, path_copy);
-    }
-    
-    lv_label_set_text_fmt(scr12_status_label, "SD Card: %d files", file_count);
-    ui_disp_full_refr();
-}
-
-static void create12(lv_obj_t *parent) 
-{
-    // Заголовок
-    lv_obj_t *title = lv_label_create(parent);
-    lv_label_set_text(title, "SD Card Browser");
-    lv_obj_set_style_text_font(title, FONT_BOLD_SIZE_16, LV_PART_MAIN);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
-    
-    // Статусная строка
-    scr12_status_label = lv_label_create(parent);
-    lv_label_set_text(scr12_status_label, "Initializing...");
-    lv_obj_set_style_text_font(scr12_status_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_align(scr12_status_label, LV_ALIGN_TOP_LEFT, 10, 35);
-    
-    // Список файлов
-    scr12_list = lv_list_create(parent);
-    lv_obj_set_size(scr12_list, LV_HOR_RES - 10, lv_pct(70));
-    lv_obj_align(scr12_list, LV_ALIGN_TOP_MID, 0, 60);
-    lv_obj_set_style_bg_color(scr12_list, DECKPRO_COLOR_BG, LV_PART_MAIN);
-    lv_obj_set_style_pad_top(scr12_list, 5, LV_PART_MAIN);
-    lv_obj_set_style_pad_row(scr12_list, 3, LV_PART_MAIN);
-    
-    // Кнопка Back
-    lv_obj_t *back_btn = lv_btn_create(parent);
-    lv_obj_set_size(back_btn, 80, 35);
-    lv_obj_align(back_btn, LV_ALIGN_BOTTOM_RIGHT, -10, -10);
-    
-    lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, scr12_btn_event_cb, LV_EVENT_CLICKED, NULL);
-}
-
-static void entry12(void) 
-{
-    // Обновляем список ОДИН РАЗ при входе
-    scr12_refresh_list(lv_scr_act());
-    ui_disp_full_refr();
-}
-
-static void exit12(void) {
-    ui_disp_full_refr();
-}
-
-static void destroy12(void) { }
-
-static scr_lifecycle_t screen12 = {
-    .create = create12,
-    .entry = entry12,
-    .exit  = exit12,
-    .destroy = destroy12,
-};
-#endif
-// --------------------- screen 13 --------------------- SD File Viewer
-#if 1
-static lv_obj_t *scr13_textarea;
-static lv_obj_t *scr13_status_label;
-
-static void scr13_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
-
-static void scr13_scroll_up_cb(lv_event_t *e)
-{
-    lv_obj_scroll_by(scr13_textarea, 0, -40, LV_ANIM_ON);
-    ui_disp_full_refr();
-}
-
-static void scr13_scroll_down_cb(lv_event_t *e)
-{
-    lv_obj_scroll_by(scr13_textarea, 0, 40, LV_ANIM_ON);
-    ui_disp_full_refr();
-}
-
-static void scr13_scroll_top_cb(lv_event_t *e)
-{
-    lv_obj_scroll_to_y(scr13_textarea, 0, LV_ANIM_ON);
-    ui_disp_full_refr();
-}
-
-static void scr13_scroll_bottom_cb(lv_event_t *e)
-{
-    lv_obj_scroll_to_y(scr13_textarea, LV_COORD_MAX, LV_ANIM_ON);
-    ui_disp_full_refr();
-}
-
-static void create13(lv_obj_t *parent) 
-{
-    // Настройки родителя - отключаем его прокрутку
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
-    
-    // Статусная строка
-    scr13_status_label = lv_label_create(parent);
-    lv_obj_set_style_text_font(scr13_status_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_align(scr13_status_label, LV_ALIGN_TOP_LEFT, 10, 5);
-    
-    // Текстовая область
-    scr13_textarea = lv_textarea_create(parent);
-    lv_obj_set_width(scr13_textarea, LV_HOR_RES - 20);
-    lv_obj_set_height(scr13_textarea, LV_VER_RES - 100);
-    lv_obj_align(scr13_textarea, LV_ALIGN_TOP_MID, 0, 30);
-    
-    // Настройки textarea
-    lv_textarea_set_text(scr13_textarea, "Loading...");  // Только чтение
-    lv_textarea_set_one_line(scr13_textarea, false);     // Многострочный
-    
-    // Включаем прокрутку
-    lv_obj_set_scrollbar_mode(scr13_textarea, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_scroll_dir(scr13_textarea, LV_DIR_VER);
-    
-    // Стиль
-    lv_obj_set_style_text_font(scr13_textarea, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(scr13_textarea, 10, LV_PART_MAIN);
-    
-    // Кнопка Back
-    lv_obj_t *back_btn = lv_btn_create(parent);
-    lv_obj_set_size(back_btn, 60, 35);
-    lv_obj_align(back_btn, LV_ALIGN_BOTTOM_RIGHT, -10, -10);
-    lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, scr13_btn_event_cb, LV_EVENT_CLICKED, NULL);
-    
-    // Кнопки прокрутки (для EPD удобнее чем жесты)
-    lv_obj_t *up_btn = lv_btn_create(parent);
-    lv_obj_set_size(up_btn, 35, 35);
-    lv_obj_align(up_btn, LV_ALIGN_BOTTOM_LEFT, 10, -55);
-    lv_obj_t *up_label = lv_label_create(up_btn);
-    lv_label_set_text(up_label, LV_SYMBOL_UP);
-    lv_obj_center(up_label);
-    lv_obj_add_event_cb(up_btn, scr13_scroll_up_cb, LV_EVENT_CLICKED, NULL);
-    
-    lv_obj_t *down_btn = lv_btn_create(parent);
-    lv_obj_set_size(down_btn, 35, 35);
-    lv_obj_align(down_btn, LV_ALIGN_BOTTOM_LEFT, 55, -55);
-    lv_obj_t *down_label = lv_label_create(down_btn);
-    lv_label_set_text(down_label, LV_SYMBOL_DOWN);
-    lv_obj_center(down_label);
-    lv_obj_add_event_cb(down_btn, scr13_scroll_down_cb, LV_EVENT_CLICKED, NULL);
-    
-    lv_obj_t *top_btn = lv_btn_create(parent);
-    lv_obj_set_size(top_btn, 35, 35);
-    lv_obj_align(top_btn, LV_ALIGN_BOTTOM_LEFT, 100, -55);
-    lv_obj_t *top_label = lv_label_create(top_btn);
-    lv_label_set_text(top_label, "Top");
-    lv_obj_set_style_text_font(top_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_center(top_label);
-    lv_obj_add_event_cb(top_btn, scr13_scroll_top_cb, LV_EVENT_CLICKED, NULL);
-    
-    lv_obj_t *bottom_btn = lv_btn_create(parent);
-    lv_obj_set_size(bottom_btn, 45, 35);
-    lv_obj_align(bottom_btn, LV_ALIGN_BOTTOM_LEFT, 145, -55);
-    lv_obj_t *bottom_label = lv_label_create(bottom_btn);
-    lv_label_set_text(bottom_label, "End");
-    lv_obj_set_style_text_font(bottom_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_center(bottom_label);
-    lv_obj_add_event_cb(bottom_btn, scr13_scroll_bottom_cb, LV_EVENT_CLICKED, NULL);
-}
-
-static void entry13(void) 
-{
-    if (!selected_file_path) {
-        lv_label_set_text(scr13_status_label, "Error: No file selected");
-        lv_textarea_set_text(scr13_textarea, "Please select a file first.");
-        ui_disp_full_refr();
-        return;
-    }
-    
-    // Получаем размер файла
-    size_t file_size = ui_sd_get_file_size(selected_file_path);
-    
-    // Статус
-    lv_label_set_text_fmt(scr13_status_label, "File: %s (%d bytes)", 
-                          selected_file_path + 1, file_size);
-    lv_textarea_set_text(scr13_textarea, "Loading...");
-    ui_disp_full_refr();
-    
-    // Читаем файл
-    const char *content = ui_sd_read_file(selected_file_path);
-    
-    // Ограничиваем для производительности EPD
-    const size_t MAX_DISPLAY = 4000;
-    if (strlen(content) > MAX_DISPLAY) {
-        char *truncated = (char*)malloc(MAX_DISPLAY + 200);
-        if (truncated) {
-            strncpy(truncated, content, MAX_DISPLAY);
-            truncated[MAX_DISPLAY] = '\0';
-            strcat(truncated, "\n\n... (file truncated, too large for EPD)");
-            lv_textarea_set_text(scr13_textarea, truncated);
-            free(truncated);
-        } else {
-            lv_textarea_set_text(scr13_textarea, content);
-        }
-    } else {
-        lv_textarea_set_text(scr13_textarea, content);
-    }
-    
-    // Прокрутка в начало
-    lv_obj_scroll_to_y(scr13_textarea, 0, LV_ANIM_OFF);
-    
-    ui_disp_full_refr();
-}
-
-static void exit13(void) {
-    ui_disp_full_refr();
-}
-
-static void destroy13(void) { }
-
-static scr_lifecycle_t screen13 = {
-    .create = create13,
-    .entry = entry13,
-    .exit  = exit13,
-    .destroy = destroy13,
-};
-#endif
 //************************************[ UI ENTRY ]******************************************
 static lv_obj_t *menu_keypad;
 static lv_timer_t *menu_timer = NULL;
@@ -3344,23 +3194,23 @@ void ui_deckpro_entry(void)
     scr_mgr_register(SCREEN1_2_ID,  &screen1_2);    // - Lora Setting
     scr_mgr_register(SCREEN2_ID,    &screen2);      // Setting
     scr_mgr_register(SCREEN2_1_ID,  &screen2_1);    //  - About System
-    scr_mgr_register(SCREEN3_ID,    &screen3);      // 
+    scr_mgr_register(SCREEN3_ID,    &screen3);      // - GPS
     scr_mgr_register(SCREEN4_ID,    &screen4);      // WIFI
     scr_mgr_register(SCREEN4_1_ID,  &screen4_1);    //  - WIFI Config
     scr_mgr_register(SCREEN4_2_ID,  &screen4_2);    //  - WIFI Scan
-    scr_mgr_register(SCREEN5_ID,    &screen5);      // 
+    scr_mgr_register(SCREEN5_ID,    &screen5);      // - Test
     scr_mgr_register(SCREEN6_ID,    &screen6);      // Battery
     scr_mgr_register(SCREEN6_1_ID,  &screen6_1);    //  - BQ25896
     scr_mgr_register(SCREEN6_2_ID,  &screen6_2);    //  - BQ27220
-    scr_mgr_register(SCREEN7_ID,    &screen7);      // 
+    scr_mgr_register(SCREEN7_ID,    &screen7);  
+    scr_mgr_register(SCREEN7_1_ID,    &screen_reader);     // 
     scr_mgr_register(SCREEN8_ID,    &screen8);      // A7682E
     scr_mgr_register(SCREEN8_1_ID,  &screen8_1);    //  - Call test
     scr_mgr_register(SCREEN8_2_ID,  &screen8_2);    //  - AT test
     scr_mgr_register(SCREEN9_ID,    &screen9);      // Shutdown
     scr_mgr_register(SCREEN10_ID,   &screen10);     // PCM5102
     scr_mgr_register(SCREEN11_ID,   &screen11);
-    scr_mgr_register(SCREEN12_ID, &screen12);
-    scr_mgr_register(SCREEN13_ID, &screen13);
+
 
     scr_mgr_switch(SCREEN0_ID, false); // set root screen
     scr_mgr_set_anim(LV_SCR_LOAD_ANIM_OVER_LEFT, LV_SCR_LOAD_ANIM_OVER_LEFT, LV_SCR_LOAD_ANIM_OVER_LEFT);

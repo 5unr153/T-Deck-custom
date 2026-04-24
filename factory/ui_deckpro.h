@@ -61,14 +61,13 @@ enum {
     SCREEN6_1_ID,
     SCREEN6_2_ID,
     SCREEN7_ID,
+    SCREEN7_1_ID,
     SCREEN8_ID,
     SCREEN8_1_ID,
     SCREEN8_2_ID,
     SCREEN9_ID,
     SCREEN10_ID,
     SCREEN11_ID,
-    SCREEN12_ID,
-    SCREEN13_ID,
 };
 
 typedef void (*ui_indev_read_cb)(int);
