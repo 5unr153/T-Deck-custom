@@ -2110,6 +2110,8 @@ static scr_lifecycle_t screen6_2 = {
 #if 1
 static lv_obj_t *scr7_list;
 static lv_obj_t *scr7_status_label;
+static lv_timer_t *reader_timer;
+
 
 static void scr7_btn_event_cb(lv_event_t * e)
 {
@@ -2311,6 +2313,36 @@ static void reader_back_cb(lv_event_t *e)
     }
 }
 
+
+
+static void reader_timer_event(lv_timer_t *t)
+{
+    static int sec = 0;
+    char keypay_v;
+
+    int ret = ui_input_get_keypay_val(&keypay_v);
+    if(ret > 0)
+    {
+        ui_input_set_keypay_flag();
+        if (keypay_v == 'p')
+        {
+            reader_load_current_page();
+        }
+                if (keypay_v == 'q')
+        {
+            sd_reader_set(-MAX_CHARS*2);
+            reader_load_current_page();
+        }
+        sec = 0;
+    }
+
+    sec++;
+    if(sec > 60) // 2s
+    {
+        sec = 0;
+    }
+}
+
 static void create_reader(lv_obj_t *parent) 
 {
    
@@ -2371,6 +2403,7 @@ static void create_reader(lv_obj_t *parent)
 static void entry_reader(void) 
 {
 
+    reader_timer = lv_timer_create(reader_timer_event, 50, NULL);
     if (!selected_file_path) {
         lv_label_set_text(reader_label, "No file selected.\nGo back and select a file.");
         ui_disp_full_refr();
@@ -2391,6 +2424,12 @@ static void entry_reader(void)
 
 static void exit_reader(void){ 
     sd_reader_close();
+    ui_disp_full_refr();
+    if(reader_timer)
+    {
+        lv_timer_del(reader_timer);
+        reader_timer = NULL;
+    }
     ui_disp_full_refr();
 }
 
