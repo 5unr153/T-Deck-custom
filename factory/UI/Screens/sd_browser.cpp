@@ -1,7 +1,5 @@
 #include "UI/ui_deckpro.h"
 #include "UI/ui_deckpro_port.h"
-#include "stdio.h"
-#include "Arduino.h"
 
 
 static lv_obj_t *scr7_list;
@@ -32,7 +30,6 @@ static void scr7_file_click_cb(lv_event_t *e)
     // Сохраняем путь в глобальную переменную для следующего экрана
     // (или передаём через user_data при push)
     sd_browser_set_selected_file(path);
-    Serial.println(path);
     // Переходим на экран просмотра
     scr_mgr_push(SCREEN7_1_ID, false);
 }
