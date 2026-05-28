@@ -598,9 +598,10 @@ static sd_reader_state_t reader_state = {0};
 static File current_file;
 static char read_buffer[4096];  // Буфер для чтения (4KB)
 static bool file_opened = false;
+char reader_path[256];
 
 // Имя файла для сохранения состояния (на SD)
-#define READER_STATE_FILE "/.reader_state.dat"
+#define READER_STATE_FILE ".reader_state.dat"
 
 // Сохранить состояние на SD
 bool sd_reader_save_state(void)
@@ -609,8 +610,8 @@ bool sd_reader_save_state(void)
     
     shared_spi_lock();
     shared_spi_prepare_device(BOARD_SD_CS);
-    
-    File state_file = SD.open(READER_STATE_FILE, FILE_WRITE);
+    sprintf(reader_path, "%s%s", reader_state.file_path, READER_STATE_FILE);
+    File state_file = SD.open(reader_path, FILE_WRITE);
     if (!state_file) {
         shared_spi_unlock();
         return false;
@@ -634,8 +635,8 @@ bool sd_reader_load_state(const char *path)
     
     shared_spi_lock();
     shared_spi_prepare_device(BOARD_SD_CS);
-    
-    File state_file = SD.open(READER_STATE_FILE, FILE_READ);
+    sprintf(reader_path, "%s%s", path, READER_STATE_FILE);
+    File state_file = SD.open(reader_path, FILE_READ);
     if (!state_file) {
         shared_spi_unlock();
         return false;
@@ -660,6 +661,16 @@ bool sd_reader_load_state(const char *path)
     }
     
     return false;
+}
+
+void sd_reader_set(int offset_mod){
+    reader_state.offset += offset_mod;
+    if (reader_state.offset < 0){
+        reader_state.offset = 0;
+    }
+    current_file.seek(reader_state.offset);
+    sd_reader_save_state();
+
 }
 
 // Открыть файл для резидентового чтения
@@ -701,6 +712,7 @@ bool sd_reader_open(const char *path)
     
     // Перемещаемся на сохранённую позицию
     if (reader_state.offset > 0) {
+        reader_state.offset -= 312;
         current_file.seek(reader_state.offset);
         Serial.printf("[SD Reader] Resumed at offset: %d\n", reader_state.offset);
     }
@@ -739,46 +751,6 @@ void sd_reader_close(void)
     Serial.println("[SD Reader] Closed");
 }
 
-// Прочитать кусок файла (возвращает указатель на буфер)
-const char* sd_reader_read_chunk(size_t chunk_size)
-{
-    if (!file_opened || !current_file) {
-        Serial.println("[SD Reader] File not open");
-        return NULL;
-    }
-    
-    if (chunk_size > sizeof(read_buffer) - 1) {
-        chunk_size = sizeof(read_buffer) - 1;
-    }
-    
-    shared_spi_lock();
-    shared_spi_prepare_device(BOARD_SD_CS);
-    
-    // Читаем данные
-    size_t bytes_read = current_file.readBytes(read_buffer, chunk_size);
-    
-    if (bytes_read > 0) {
-        read_buffer[bytes_read] = '\0';
-        reader_state.offset += bytes_read;
-        reader_state.last_update = millis();
-        
-        // Сохраняем состояние каждые 5 прочитанных кусков или каждые 10 секунд
-        static int read_count = 0;
-        read_count++;
-        if (read_count >= 5 || (millis() - reader_state.last_update) > 10000) {
-            sd_reader_save_state();
-            read_count = 0;
-        }
-        
-        Serial.printf("[SD Reader] Read %d bytes, offset=%d/%d\n", 
-                      bytes_read, reader_state.offset, reader_state.total_size);
-    }
-    
-    shared_spi_unlock();
-    
-    return (bytes_read > 0) ? read_buffer : NULL;
-}
-
 // Получить текущую позицию
 size_t sd_reader_get_position(void)
 {
@@ -807,6 +779,46 @@ void sd_reader_reset(void)
         Serial.println("[SD Reader] Reset to beginning");
     }
 }
+
+
+// Чтение следующих N строк из файла
+// Возвращает количество прочитанных строк
+int sd_reader_read_lines(int max_lines, int max_chars, char *buffer, size_t buffer_size)
+{
+    if (!file_opened || !current_file) {
+        return 0;
+    }
+    
+    shared_spi_lock();
+    shared_spi_prepare_device(BOARD_SD_CS);
+    
+    int lines_read = 0;
+    size_t buffer_pos = 0;
+    
+    buffer[0] = '\0';
+    
+    while ( lines_read < max_lines && buffer_pos < max_chars && !sd_reader_is_eof()) {
+        
+        // Читаем один символ за раз 
+
+        char c = current_file.read();
+        reader_state.offset++;
+
+        if (c == '\n') {
+            lines_read++;  // Конец строки
+        } 
+
+        if (c != '\r') {
+            buffer[buffer_pos++] = c;
+        }
+
+    }
+    
+    shared_spi_unlock();
+    sd_reader_save_state();
+    return lines_read;
+}
+
 
 // void audio_id3data(const char *info){  //id3 metadata
 //     Serial.print("id3data     ");Serial.println(info);

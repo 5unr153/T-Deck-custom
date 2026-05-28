@@ -2221,15 +2221,17 @@ static scr_lifecycle_t screen7 = {
 #endif
 // --------------------- screen 7_1 --------------------- SD File Viewer
 // --------------------- screen_reader --------------------- SD File Reader (с постраничным чтением)
+// --------------------- screen_reader --------------------- SD File Reader (ручное управление)
+// --------------------- screen_reader --------------------- SD File Reader (построчно)
 #if 1
-static lv_obj_t *reader_textarea;
+static lv_obj_t *reader_label;          // Label вместо textarea
 static lv_obj_t *reader_status_label;
 static lv_obj_t *reader_progress_bar;
 static lv_obj_t *reader_page_label;
-static lv_timer_t *reader_timer = NULL;
+static lv_obj_t *reader_info_label;
 
-// Настройки постраничного чтения
-#define READER_CHUNK_SIZE 1024  // Читаем по 1KB за раз
+// Буфер для текущей страницы
+static char reader_page_buffer[MAX_CHARS + 100];
 
 static void reader_update_display(void)
 {
@@ -2237,187 +2239,100 @@ static void reader_update_display(void)
     size_t total = sd_reader_get_total();
     int percent = (total > 0) ? (pos * 100 / total) : 0;
     
-    // Обновляем прогресс-бар
-    if (reader_progress_bar) {
-        lv_bar_set_value(reader_progress_bar, percent, LV_ANIM_OFF);
-    }
-    
     // Обновляем статус
     if (reader_status_label) {
-        lv_label_set_text_fmt(reader_status_label, 
-                              "%d%% (%d/%d KB)", 
-                              percent,
-                              pos / 1024, 
-                              total / 1024);
+        lv_label_set_text_fmt(reader_status_label, "%d%% (%d/%d KB)", 
+                              percent, pos / 1024, total / 1024);
     }
     
-    // Обновляем номер страницы
-    if (reader_page_label) {
-        int current_page = (pos / READER_CHUNK_SIZE) + 1;
-        int total_pages = (total + READER_CHUNK_SIZE - 1) / READER_CHUNK_SIZE;
-        lv_label_set_text_fmt(reader_page_label, "Page: %d/%d", current_page, total_pages);
-    }
+
 }
 
-static void reader_load_next_chunk(lv_timer_t *timer)
+// Загрузить страницу (N строк)
+static bool reader_load_current_page(void)
 {
     if (sd_reader_is_eof()) {
-        lv_textarea_add_text(reader_textarea, "\n\n--- END OF FILE ---");
-        lv_timer_del(timer);
-        reader_timer = NULL;
-        ui_disp_full_refr();
-        return;
+        lv_label_set_text(reader_label, "--- END OF FILE ---");
+        //ui_disp_full_refr();
+        return false;
     }
     
-    // Читаем следующий кусок
-    const char *chunk = sd_reader_read_chunk(READER_CHUNK_SIZE);
+    // Очищаем буфер
+    memset(reader_page_buffer, 0, sizeof(reader_page_buffer));
     
-    if (chunk && strlen(chunk) > 0) {
-        // Добавляем текст в textarea
-        lv_textarea_add_text(reader_textarea, chunk);
-        
-        // Автопрокрутка вниз
-        lv_obj_scroll_to_y(reader_textarea, LV_COORD_MAX, LV_ANIM_OFF);
-        
-        // Обновляем UI
+    // Читаем строки
+    int lines_read = sd_reader_read_lines(MAX_LINES_ON_SCREEN, MAX_CHARS,
+                                           reader_page_buffer, 
+                                           sizeof(reader_page_buffer));
+    
+
+    if (lines_read > 0) {
+        lv_label_set_text(reader_label, reader_page_buffer);
         reader_update_display();
-        ui_disp_full_refr();
+        //ui_disp_full_refr();
+        return true;
     }
-    
-    // Если достигли конца, удаляем таймер
-    if (sd_reader_is_eof()) {
-        lv_timer_del(timer);
-        reader_timer = NULL;
-        lv_textarea_add_text(reader_textarea, "\n\n--- END OF FILE ---");
-        ui_disp_full_refr();
-    }
+
+    return false;
 }
 
+// Загрузить следующую страницу
 static void reader_next_page_cb(lv_event_t *e)
 {
-    if (reader_timer) {
-        // Уже загружается
+    if (sd_reader_is_eof()) {
+        lv_label_set_text(reader_label, "--- END OF FILE ---");
         return;
     }
-    // Создаём таймер для асинхронной загрузки следующей страницы
-    reader_timer = lv_timer_create(reader_load_next_chunk, 10, NULL);
-}
-
-static void reader_prev_page_cb(lv_event_t *e)
-{
-    // Для EPD сложно реализовать назад, проще показать сообщение
-    lv_obj_t *msgbox = lv_msgbox_create(lv_layer_top(), "Info", 
-                                         "Previous page not implemented.\n"
-                                         "Use 'Reset' to start over.", 
-                                         NULL, true);
-    lv_obj_center(msgbox);
     
-    // Авто-закрытие через 2 секунды
-    lv_timer_t *timer = lv_timer_create([](lv_timer_t *t) {
-        lv_obj_del((lv_obj_t*)t->user_data);
-        lv_timer_del(t);
-    }, 2000, msgbox);
+    // Загружаем следующую страницу
+    reader_load_current_page();
 }
 
+static void reader_back_page_cb(lv_event_t *e)
+{
+    sd_reader_set(-MAX_CHARS*2);
+    // Загружаем  страницу
+    reader_load_current_page();
+}
+
+// Сбросить и начать сначала
 static void reader_reset_cb(lv_event_t *e)
 {
-    // Сбрасываем прогресс
     sd_reader_reset();
-    
-    // Очищаем textarea
-    lv_textarea_set_text(reader_textarea, "");
-    
-    // Останавливаем текущий таймер если есть
-    if (reader_timer) {
-        lv_timer_del(reader_timer);
-        reader_timer = NULL;
-    }
-    
-    // Загружаем заново
-    reader_timer = lv_timer_create(reader_load_next_chunk, 10, NULL);
-    
-    ui_disp_full_refr();
+    reader_load_current_page();
 }
 
+// Кнопка Back
 static void reader_back_cb(lv_event_t *e)
 {
     if (e->code == LV_EVENT_CLICKED) {
-        // Закрываем файл и сохраняем состояние
         sd_reader_close();
-        
-        // Останавливаем таймер если есть
-        if (reader_timer) {
-            lv_timer_del(reader_timer);
-            reader_timer = NULL;
-        }
-        
         scr_mgr_pop(false);
     }
 }
 
 static void create_reader(lv_obj_t *parent) 
 {
-    // Настройки родителя - отключаем его прокрутку
-    lv_obj_set_scrollbar_mode(parent, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
-    
-    // Верхняя панель с информацией
-    lv_obj_t *info_panel = lv_obj_create(parent);
-    lv_obj_set_size(info_panel, LV_HOR_RES, 45);
-    lv_obj_align(info_panel, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_border_width(info_panel, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(info_panel, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(info_panel, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(info_panel, LV_OBJ_FLAG_SCROLLABLE);
-    
-    // Имя файла (обрезанное)
-    lv_obj_t *filename_label = lv_label_create(info_panel);
-    lv_obj_set_style_text_font(filename_label, FONT_BOLD_SIZE_12, LV_PART_MAIN);
-    lv_obj_align(filename_label, LV_ALIGN_TOP_LEFT, 10, 5);
-    
-    // Прогресс-бар
-    reader_progress_bar = lv_bar_create(info_panel);
-    lv_obj_set_size(reader_progress_bar, LV_HOR_RES - 20, 10);
-    lv_obj_align(reader_progress_bar, LV_ALIGN_TOP_MID, 0, 20);
-    lv_bar_set_range(reader_progress_bar, 0, 100);
-    
+   
     // Статус (проценты)
-    reader_status_label = lv_label_create(info_panel);
-    lv_obj_set_style_text_font(reader_status_label, FONT_BOLD_SIZE_12, LV_PART_MAIN);
-    lv_obj_align(reader_status_label, LV_ALIGN_TOP_RIGHT, -10, 5);
+    reader_status_label = lv_label_create(parent);
+    lv_obj_align(reader_status_label, LV_ALIGN_TOP_RIGHT, 0, 10);
+    lv_obj_set_style_text_font(reader_status_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
     
-    // Номер страницы
-    reader_page_label = lv_label_create(info_panel);
-    lv_obj_set_style_text_font(reader_page_label, FONT_BOLD_SIZE_11, LV_PART_MAIN);
-    lv_obj_align(reader_page_label, LV_ALIGN_BOTTOM_RIGHT, -10, -2);
+    // Label для отображения текста (вместо textarea)
+    reader_label = lv_label_create(parent);
+    lv_obj_set_width(reader_label, LV_HOR_RES - 10);
+    lv_obj_set_height(reader_label, LV_VER_RES - 60);
+    lv_obj_align(reader_label, LV_ALIGN_TOP_MID, 0, 20);
+    lv_label_set_long_mode(reader_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(reader_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(reader_label, 5, LV_PART_MAIN);
     
-    // Текстовая область для содержимого
-    reader_textarea = lv_textarea_create(parent);
-    lv_obj_set_width(reader_textarea, LV_HOR_RES - 10);
-    lv_obj_set_height(reader_textarea, LV_VER_RES - 95);
-    lv_obj_align(reader_textarea, LV_ALIGN_TOP_MID, 0, 48);
     
-    lv_textarea_set_editable(reader_textarea, false);
-    lv_textarea_set_one_line(reader_textarea, false);
-    lv_obj_set_scrollbar_mode(reader_textarea, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_scroll_dir(reader_textarea, LV_DIR_VER);
-    lv_obj_set_style_text_font(reader_textarea, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(reader_textarea, 8, LV_PART_MAIN);
+    // Кнопка Back
+    scr_back_btn_create(parent, selected_file_path, reader_back_cb);
     
-    // Обновляем имя файла если есть
-    if (selected_file_path) {
-        // Берём только имя файла без пути
-        const char *filename = strrchr(selected_file_path, '/');
-        if (filename) filename++; else filename = selected_file_path;
-        lv_label_set_text_fmt(filename_label, "File: %.25s", filename);
-    } else {
-        lv_label_set_text(filename_label, "File: unknown");
-    }
-    
-    // Кнопка Back (через scr_back_btn_create)
-    scr_back_btn_create(parent, "Reader", reader_back_cb);
-    
-    // Кнопки управления внизу
+    // Панель управления внизу
     lv_obj_t *controls = lv_obj_create(parent);
     lv_obj_set_size(controls, LV_HOR_RES, 40);
     lv_obj_align(controls, LV_ALIGN_BOTTOM_MID, 0, 0);
@@ -2430,23 +2345,23 @@ static void create_reader(lv_obj_t *parent)
     
     // Кнопка Reset
     lv_obj_t *reset_btn = lv_btn_create(controls);
-    lv_obj_set_size(reset_btn, 70, 35);
+    lv_obj_set_size(reset_btn, 65, 35);
     lv_obj_t *reset_label = lv_label_create(reset_btn);
     lv_label_set_text(reset_label, "Reset");
     lv_obj_center(reset_label);
     lv_obj_add_event_cb(reset_btn, reader_reset_cb, LV_EVENT_CLICKED, NULL);
     
-    // Кнопка Prev (заглушка)
-    lv_obj_t *prev_btn = lv_btn_create(controls);
-    lv_obj_set_size(prev_btn, 70, 35);
-    lv_obj_t *prev_label = lv_label_create(prev_btn);
-    lv_label_set_text(prev_label, "<< Prev");
-    lv_obj_center(prev_label);
-    lv_obj_add_event_cb(prev_btn, reader_prev_page_cb, LV_EVENT_CLICKED, NULL);
-    
+    lv_obj_t *back_btn = lv_btn_create(controls);
+    lv_obj_set_size(back_btn, 65, 35);
+    lv_obj_t *back_label = lv_label_create(back_btn);
+    lv_label_set_text(back_label, "<< Back");
+    lv_obj_center(back_label);
+    lv_obj_add_event_cb(back_btn, reader_back_page_cb, LV_EVENT_CLICKED, NULL);
+
+
     // Кнопка Next
     lv_obj_t *next_btn = lv_btn_create(controls);
-    lv_obj_set_size(next_btn, 70, 35);
+    lv_obj_set_size(next_btn, 65, 35);
     lv_obj_t *next_label = lv_label_create(next_btn);
     lv_label_set_text(next_label, "Next >>");
     lv_obj_center(next_label);
@@ -2455,64 +2370,33 @@ static void create_reader(lv_obj_t *parent)
 
 static void entry_reader(void) 
 {
+
     if (!selected_file_path) {
-        if (reader_status_label) {
-            lv_label_set_text(reader_status_label, "Error: No file");
-        }
+        lv_label_set_text(reader_label, "No file selected.\nGo back and select a file.");
         ui_disp_full_refr();
         return;
     }
     
-    // Открываем файл с резидентым чтением
+    // Открываем файл
     if (!sd_reader_open(selected_file_path)) {
-        if (reader_status_label) {
-            lv_label_set_text_fmt(reader_status_label, "Cannot open");
-        }
-        lv_textarea_set_text(reader_textarea, "Failed to open file.\n\n"
-                              "Check that:\n"
-                              "- File exists\n"
-                              "- SD card is inserted\n"
-                              "- File is readable");
+        lv_label_set_text(reader_label, "Failed to open file.\n\n"
+                           "Check:\n- File exists\n- SD card inserted");
         ui_disp_full_refr();
         return;
     }
     
-    // Очищаем textarea
-    lv_textarea_set_text(reader_textarea, "");
-    
-    // Обновляем отображение
-    reader_update_display();
-    
-    // Загружаем первый кусок
-    if (reader_timer) {
-        lv_timer_del(reader_timer);
-    }
-    reader_timer = lv_timer_create(reader_load_next_chunk, 50, NULL);
-    
-    ui_disp_full_refr();
+    // Загружаем первую страницу
+    reader_load_current_page();
 }
 
-static void exit_reader(void) 
-{
-    // Сохраняем состояние при выходе
+static void exit_reader(void){ 
     sd_reader_close();
-    
-    // Останавливаем таймер
-    if (reader_timer) {
-        lv_timer_del(reader_timer);
-        reader_timer = NULL;
-    }
-    
     ui_disp_full_refr();
 }
 
 static void destroy_reader(void) 
 {
-    // Очистка ресурсов
-    if (reader_timer) {
-        lv_timer_del(reader_timer);
-        reader_timer = NULL;
-    }
+    // Очистка
 }
 
 static scr_lifecycle_t screen_reader = {

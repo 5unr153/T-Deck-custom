@@ -151,6 +151,44 @@ void ui_sd_get_file_list(char **file_names, int max_files);
 const char* ui_sd_read_file(const char *path);
 size_t ui_sd_get_file_size(const char *path);
 
+// Структура для хранения состояния чтения файла
+typedef struct {
+    char file_path[128];      // Путь к файлу
+    int offset;            // Текущая позиция чтения (байт)
+    size_t total_size;        // Общий размер файла
+    bool is_open;             // Открыт ли файл
+    uint32_t last_update;     // Время последнего обновления (для автосохранения)
+} sd_reader_state_t;
+
+// Функции для работы с резидентым чтением
+bool sd_reader_open(const char *path);
+void sd_reader_close(void);
+size_t sd_reader_get_position(void);
+size_t sd_reader_get_total(void);
+bool sd_reader_save_state(void);
+bool sd_reader_load_state(const char *path);
+bool sd_reader_is_eof(void); 
+void sd_reader_reset(void); 
+void sd_reader_set(int offset_mod);  
+
+// Горизонтальный режим (240x320 → 320x240)
+#define SCREEN_WIDTH_PX  320   // Было 240
+#define SCREEN_HEIGHT_PX 240   // Было 320
+#define FONT_HEIGHT_PX   17
+#define TEXT_MARGIN_PX   10
+#define TEXT_PADDING_PX   8
+
+// Максимальное количество строк на экране
+//#define MAX_LINES_ON_SCREEN ((SCREEN_HEIGHT_PX - 80) / FONT_HEIGHT_PX)  // ~9-10 строк
+#define MAX_LINES_ON_SCREEN 12
+// Максимальная длина строки (увеличивается при горизонтальном режиме)
+#define MAX_CHARS_PER_LINE 26
+#define MAX_CHARS (MAX_CHARS_PER_LINE * MAX_LINES_ON_SCREEN)
+
+int sd_reader_read_lines(int max_lines, int max_chars, char *buffer, size_t buffer_size);
+
+
+
 #ifdef __cplusplus
 } /*extern "C"*/
 #endif
