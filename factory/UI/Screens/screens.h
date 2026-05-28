@@ -1,0 +1,2 @@
+extern scr_lifecycle_t screen_browser;
+extern scr_lifecycle_t screen_reader;

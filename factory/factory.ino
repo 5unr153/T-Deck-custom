@@ -14,7 +14,7 @@
 #include <TouchDrvCSTXXX.hpp>
 #include <TinyGPS++.h>
 #include "lvgl.h"
-#include "ui_deckpro.h"
+#include "UI/ui_deckpro.h"
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include "factory.h"
 #include "peripheral.h"

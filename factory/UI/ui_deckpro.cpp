@@ -6,31 +6,8 @@
 #include "Arduino.h"
 
 
+char global_buf[GLOBAL_BUF_LEN];
 
-#define SETTING_PAGE_MAX_ITEM 7
-#define GET_BUFF_LEN(a) sizeof(a)/sizeof(a[0])
-
-#define FONT_BOLD_SIZE_14 &Font_Mono_Bold_14
-#define FONT_BOLD_SIZE_15 &Font_Mono_Bold_15
-#define FONT_BOLD_SIZE_16 &Font_Mono_Bold_16
-#define FONT_BOLD_SIZE_17 &Font_Mono_Bold_17
-#define FONT_BOLD_SIZE_18 &Font_Mono_Bold_18
-#define FONT_BOLD_SIZE_19 &Font_Mono_Bold_19
-
-#define FONT_BOLD_MONO_SIZE_14 &Font_Mono_Bold_14
-#define FONT_BOLD_MONO_SIZE_15 &Font_Mono_Bold_15
-#define FONT_BOLD_MONO_SIZE_16 &Font_Mono_Bold_16
-#define FONT_BOLD_MONO_SIZE_17 &Font_Mono_Bold_17
-#define FONT_BOLD_MONO_SIZE_18 &Font_Mono_Bold_18
-#define FONT_BOLD_MONO_SIZE_19 &Font_Mono_Bold_19
-
-#define GLOBAL_BUF_LEN 30
-#define LOW_VOLTAGE_THRESHOLD_MV 3300
-#define LOW_VOLTAGE_SOC_THRESHOLD 5
-#define LOW_VOLTAGE_SHUTDOWN_DELAY_MS 20000
-#define LOW_VOLTAGE_POLL_MS 250
-static char global_buf[GLOBAL_BUF_LEN];
-static char* selected_file_path = NULL;
 
 
 static lv_timer_t *touch_chk_timer = NULL;
@@ -180,7 +157,7 @@ static void low_voltage_timer_cb(lv_timer_t *t)
 
 //************************************[ Other fun ]******************************************
 #if 1
-static lv_obj_t *scr_back_btn_create(lv_obj_t *parent, const char *text, lv_event_cb_t cb)
+lv_obj_t *scr_back_btn_create(lv_obj_t *parent, const char *text, lv_event_cb_t cb)
 {
     lv_obj_t * btn = lv_btn_create(parent);
     lv_obj_remove_style_all(btn);
@@ -210,7 +187,7 @@ static lv_obj_t *scr_back_btn_create(lv_obj_t *parent, const char *text, lv_even
     return label;
 }
 
-static const char *line_full_format(int max_c, const char *str1, const char *str2)
+const char *line_full_format(int max_c, const char *str1, const char *str2)
 {
     int len1 = 0, len2 = 0;
     int j;
@@ -2106,345 +2083,7 @@ static scr_lifecycle_t screen6_2 = {
 #undef line_max
 #endif
 
-//************************************[ screen 7 ]****************************************** SD Card Browser
-#if 1
-static lv_obj_t *scr7_list;
-static lv_obj_t *scr7_status_label;
-static lv_timer_t *reader_timer;
 
-
-static void scr7_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
-
-static void scr7_file_click_cb(lv_event_t *e)
-{
-    char *path = (char*)lv_event_get_user_data(e);
-    if (!path) return;
-    
-    // Сохраняем путь в глобальную переменную для следующего экрана
-    // (или передаём через user_data при push)
-    selected_file_path = path;
-    
-    // Переходим на экран просмотра
-    scr_mgr_push(SCREEN7_1_ID, false);
-}
-
-static void scr7_refresh_list(lv_obj_t *parent)
-{
-    // Очищаем список
-    while(lv_obj_get_child_cnt(scr7_list) > 0) {
-        lv_obj_del(lv_obj_get_child(scr7_list, 0));
-    }
-    
-    lv_label_set_text(scr7_status_label, "Scanning SD card...");
-    ui_disp_full_refr();
-    
-    // Получаем список файлов
-    char *file_names[30] = {0};
-    char buffers[30][64];
-    for(int i = 0; i < 30; i++) {
-        buffers[i][0] = '\0';
-        file_names[i] = buffers[i];
-    }
-    
-    ui_sd_get_file_list(file_names, 30);
-    
-    // Создаём кнопки для каждого файла
-    int file_count = 0;
-    for(int i = 0; i < 30; i++) {
-        if (file_names[i][0] == '\0') break;
-        file_count++;
-        
-        // Получаем размер файла для отображения
-        size_t fsize = ui_sd_get_file_size(file_names[i]);
-
-        // Формируем строку: имя файла + размер
-        char display_name[80];
-        snprintf(display_name, 80, "%s", file_names[i] + 1);
-        
-        lv_obj_t *btn = lv_list_add_btn(scr7_list, LV_SYMBOL_FILE, display_name);
-        lv_obj_set_height(btn, 25);
-        lv_obj_set_style_text_font(btn, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-        
-        // Сохраняем полный путь
-        char *path_copy = (char*)lv_mem_alloc(strlen(file_names[i]) + 1);
-        strcpy(path_copy, file_names[i]);
-        lv_obj_add_event_cb(btn, scr7_file_click_cb, LV_EVENT_CLICKED, path_copy);
-    }
-    
-    lv_label_set_text_fmt(scr7_status_label, "%d files", file_count);
-    ui_disp_full_refr();
-}
-
-static void create7(lv_obj_t *parent) 
-{
-    
-    // Статусная строка
-    scr7_status_label = lv_label_create(parent);
-    lv_label_set_text(scr7_status_label, "Initializing...");
-    lv_obj_set_style_text_font(scr7_status_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_align(scr7_status_label, LV_ALIGN_TOP_LEFT, 10, 35);
-    
-    // Список файлов
-    scr7_list = lv_list_create(parent);
-    lv_obj_set_size(scr7_list, LV_HOR_RES - 10, lv_pct(70));
-    lv_obj_align(scr7_list, LV_ALIGN_TOP_MID, 0, 60);
-    lv_obj_set_style_bg_color(scr7_list, DECKPRO_COLOR_BG, LV_PART_MAIN);
-    lv_obj_set_style_pad_top(scr7_list, 5, LV_PART_MAIN);
-    lv_obj_set_style_pad_row(scr7_list, 3, LV_PART_MAIN);
-    
-    lv_obj_t *back7_label = scr_back_btn_create(parent, ("SD Card"), scr7_btn_event_cb);
-
-}
-
-static void entry7(void) 
-{
-    // Обновляем список ОДИН РАЗ при входе
-    scr7_refresh_list(lv_scr_act());
-    ui_disp_full_refr();
-}
-
-static void exit7(void) {
-    ui_disp_full_refr();
-}
-
-static void destroy7(void) { }
-
-static scr_lifecycle_t screen7 = {
-    .create = create7,
-    .entry = entry7,
-    .exit  = exit7,
-    .destroy = destroy7,
-};
-#endif
-// --------------------- screen 7_1 --------------------- SD File Viewer
-// --------------------- screen_reader --------------------- SD File Reader (с постраничным чтением)
-// --------------------- screen_reader --------------------- SD File Reader (ручное управление)
-// --------------------- screen_reader --------------------- SD File Reader (построчно)
-#if 1
-static lv_obj_t *reader_label;          // Label вместо textarea
-static lv_obj_t *reader_status_label;
-static lv_obj_t *reader_progress_bar;
-static lv_obj_t *reader_page_label;
-static lv_obj_t *reader_info_label;
-
-// Буфер для текущей страницы
-static char reader_page_buffer[MAX_CHARS + 100];
-
-static void reader_update_display(void)
-{
-    size_t pos = sd_reader_get_position();
-    size_t total = sd_reader_get_total();
-    int percent = (total > 0) ? (pos * 100 / total) : 0;
-    
-    // Обновляем статус
-    if (reader_status_label) {
-        lv_label_set_text_fmt(reader_status_label, "%d%% (%d/%d KB)", 
-                              percent, pos / 1024, total / 1024);
-    }
-    
-
-}
-
-// Загрузить страницу (N строк)
-static bool reader_load_current_page(void)
-{
-    if (sd_reader_is_eof()) {
-        lv_label_set_text(reader_label, "--- END OF FILE ---");
-        //ui_disp_full_refr();
-        return false;
-    }
-    
-    // Очищаем буфер
-    memset(reader_page_buffer, 0, sizeof(reader_page_buffer));
-    
-    // Читаем строки
-    int lines_read = sd_reader_read_lines(MAX_LINES_ON_SCREEN, MAX_CHARS,
-                                           reader_page_buffer, 
-                                           sizeof(reader_page_buffer));
-    
-
-    if (lines_read > 0) {
-        lv_label_set_text(reader_label, reader_page_buffer);
-        reader_update_display();
-        //ui_disp_full_refr();
-        return true;
-    }
-
-    return false;
-}
-
-// Загрузить следующую страницу
-static void reader_next_page_cb(lv_event_t *e)
-{
-    if (sd_reader_is_eof()) {
-        lv_label_set_text(reader_label, "--- END OF FILE ---");
-        return;
-    }
-    
-    // Загружаем следующую страницу
-    reader_load_current_page();
-}
-
-static void reader_back_page_cb(lv_event_t *e)
-{
-    sd_reader_set(-MAX_CHARS*2);
-    // Загружаем  страницу
-    reader_load_current_page();
-}
-
-// Сбросить и начать сначала
-static void reader_reset_cb(lv_event_t *e)
-{
-    sd_reader_reset();
-    reader_load_current_page();
-}
-
-// Кнопка Back
-static void reader_back_cb(lv_event_t *e)
-{
-    if (e->code == LV_EVENT_CLICKED) {
-        sd_reader_close();
-        scr_mgr_pop(false);
-    }
-}
-
-
-
-static void reader_timer_event(lv_timer_t *t)
-{
-    static int sec = 0;
-    char keypay_v;
-
-    int ret = ui_input_get_keypay_val(&keypay_v);
-    if(ret > 0)
-    {
-        ui_input_set_keypay_flag();
-        if (keypay_v == 'p')
-        {
-            reader_load_current_page();
-        }
-                if (keypay_v == 'q')
-        {
-            sd_reader_set(-MAX_CHARS*2);
-            reader_load_current_page();
-        }
-        sec = 0;
-    }
-
-    sec++;
-    if(sec > 60) // 2s
-    {
-        sec = 0;
-    }
-}
-
-static void create_reader(lv_obj_t *parent) 
-{
-   
-    // Статус (проценты)
-    reader_status_label = lv_label_create(parent);
-    lv_obj_align(reader_status_label, LV_ALIGN_TOP_RIGHT, 0, 10);
-    lv_obj_set_style_text_font(reader_status_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    
-    // Label для отображения текста (вместо textarea)
-    reader_label = lv_label_create(parent);
-    lv_obj_set_width(reader_label, LV_HOR_RES - 10);
-    lv_obj_set_height(reader_label, LV_VER_RES - 60);
-    lv_obj_align(reader_label, LV_ALIGN_TOP_MID, 0, 20);
-    lv_label_set_long_mode(reader_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(reader_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(reader_label, 5, LV_PART_MAIN);
-    
-    
-    // Кнопка Back
-    scr_back_btn_create(parent, selected_file_path, reader_back_cb);
-    
-    // Панель управления внизу
-    lv_obj_t *controls = lv_obj_create(parent);
-    lv_obj_set_size(controls, LV_HOR_RES, 40);
-    lv_obj_align(controls, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_border_width(controls, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(controls, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(controls, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(controls, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(controls, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(controls, LV_OBJ_FLAG_SCROLLABLE);
-    
-    // Кнопка Reset
-    lv_obj_t *reset_btn = lv_btn_create(controls);
-    lv_obj_set_size(reset_btn, 65, 35);
-    lv_obj_t *reset_label = lv_label_create(reset_btn);
-    lv_label_set_text(reset_label, "Reset");
-    lv_obj_center(reset_label);
-    lv_obj_add_event_cb(reset_btn, reader_reset_cb, LV_EVENT_CLICKED, NULL);
-    
-    lv_obj_t *back_btn = lv_btn_create(controls);
-    lv_obj_set_size(back_btn, 65, 35);
-    lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "<< Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, reader_back_page_cb, LV_EVENT_CLICKED, NULL);
-
-
-    // Кнопка Next
-    lv_obj_t *next_btn = lv_btn_create(controls);
-    lv_obj_set_size(next_btn, 65, 35);
-    lv_obj_t *next_label = lv_label_create(next_btn);
-    lv_label_set_text(next_label, "Next >>");
-    lv_obj_center(next_label);
-    lv_obj_add_event_cb(next_btn, reader_next_page_cb, LV_EVENT_CLICKED, NULL);
-}
-
-static void entry_reader(void) 
-{
-
-    reader_timer = lv_timer_create(reader_timer_event, 50, NULL);
-    if (!selected_file_path) {
-        lv_label_set_text(reader_label, "No file selected.\nGo back and select a file.");
-        ui_disp_full_refr();
-        return;
-    }
-    
-    // Открываем файл
-    if (!sd_reader_open(selected_file_path)) {
-        lv_label_set_text(reader_label, "Failed to open file.\n\n"
-                           "Check:\n- File exists\n- SD card inserted");
-        ui_disp_full_refr();
-        return;
-    }
-    
-    // Загружаем первую страницу
-    reader_load_current_page();
-}
-
-static void exit_reader(void){ 
-    sd_reader_close();
-    ui_disp_full_refr();
-    if(reader_timer)
-    {
-        lv_timer_del(reader_timer);
-        reader_timer = NULL;
-    }
-    ui_disp_full_refr();
-}
-
-static void destroy_reader(void) 
-{
-    // Очистка
-}
-
-static scr_lifecycle_t screen_reader = {
-    .create = create_reader,
-    .entry = entry_reader,
-    .exit  = exit_reader,
-    .destroy = destroy_reader,
-};
-#endif
 
 //************************************[ screen 8 ]****************************************** A7682E
 // --------------------- screen 8 --------------------- A7682E
@@ -3267,7 +2906,7 @@ void ui_deckpro_entry(void)
     scr_mgr_register(SCREEN6_ID,    &screen6);      // Battery
     scr_mgr_register(SCREEN6_1_ID,  &screen6_1);    //  - BQ25896
     scr_mgr_register(SCREEN6_2_ID,  &screen6_2);    //  - BQ27220
-    scr_mgr_register(SCREEN7_ID,    &screen7);  
+    scr_mgr_register(SCREEN7_ID,    &screen_browser);  
     scr_mgr_register(SCREEN7_1_ID,    &screen_reader);     // 
     scr_mgr_register(SCREEN8_ID,    &screen8);      // A7682E
     scr_mgr_register(SCREEN8_1_ID,  &screen8_1);    //  - Call test

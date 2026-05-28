@@ -4,7 +4,7 @@
 #include "utilities.h"
 #include "factory.h"
 #include "peripheral.h"
-#include "ui_deckpro_port.h"
+#include "UI/ui_deckpro_port.h"
 
 static SX1262 radio = new Module(BOARD_LORA_CS, BOARD_LORA_INT, BOARD_LORA_RST, BOARD_LORA_BUSY);
 static int lora_mode = LORA_MODE_SEND;

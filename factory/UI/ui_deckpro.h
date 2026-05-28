@@ -16,6 +16,8 @@ extern "C" {
  * *******************************************************************************/
 #include "lvgl.h"
 #include "ui_scr_mrg.h"
+#include "UI/Screens/screens.h"
+#include "src/assets.h"
 
 /*********************************************************************************
  *                                   DEFINES
@@ -41,6 +43,31 @@ extern "C" {
 #define DECKPRO_COLOR_FG        lv_color_black()
 #define UI_SLIDING_DISTANCE     40
 #define UI_WIFI_SCAN_ITEM_MAX   13
+
+
+
+#define SETTING_PAGE_MAX_ITEM 7
+#define GET_BUFF_LEN(a) sizeof(a)/sizeof(a[0])
+
+#define FONT_BOLD_SIZE_14 &Font_Mono_Bold_14
+#define FONT_BOLD_SIZE_15 &Font_Mono_Bold_15
+#define FONT_BOLD_SIZE_16 &Font_Mono_Bold_16
+#define FONT_BOLD_SIZE_17 &Font_Mono_Bold_17
+#define FONT_BOLD_SIZE_18 &Font_Mono_Bold_18
+#define FONT_BOLD_SIZE_19 &Font_Mono_Bold_19
+
+#define FONT_BOLD_MONO_SIZE_14 &Font_Mono_Bold_14
+#define FONT_BOLD_MONO_SIZE_15 &Font_Mono_Bold_15
+#define FONT_BOLD_MONO_SIZE_16 &Font_Mono_Bold_16
+#define FONT_BOLD_MONO_SIZE_17 &Font_Mono_Bold_17
+#define FONT_BOLD_MONO_SIZE_18 &Font_Mono_Bold_18
+#define FONT_BOLD_MONO_SIZE_19 &Font_Mono_Bold_19
+
+#define GLOBAL_BUF_LEN 30
+#define LOW_VOLTAGE_THRESHOLD_MV 3300
+#define LOW_VOLTAGE_SOC_THRESHOLD 5
+#define LOW_VOLTAGE_SHUTDOWN_DELAY_MS 20000
+#define LOW_VOLTAGE_POLL_MS 250
 
 /*********************************************************************************
  *                                  TYPEDEFS
@@ -135,6 +162,14 @@ typedef struct {
  *                              GLOBAL PROTOTYPES
  * *******************************************************************************/
 void ui_deckpro_entry(void);
+
+
+extern char global_buf[30];
+
+lv_obj_t* scr_back_btn_create(lv_obj_t *parent, const char *text, lv_event_cb_t cb);
+const char* line_full_format(int max_c, const char *str1, const char *str2);
+
+
 
 #ifdef __cplusplus
 } /*extern "C"*/
