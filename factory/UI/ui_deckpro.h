@@ -93,7 +93,6 @@ enum {
     SCREEN8_1_ID,
     SCREEN8_2_ID,
     SCREEN9_ID,
-    SCREEN10_ID,
     SCREEN11_ID,
 };
 
@@ -167,9 +166,12 @@ void ui_deckpro_entry(void);
 extern char global_buf[30];
 
 lv_obj_t* scr_back_btn_create(lv_obj_t *parent, const char *text, lv_event_cb_t cb);
+void scr_btn_event_cb(lv_event_t * e);
+
 const char* line_full_format(int max_c, const char *str1, const char *str2);
 
 
+extern lv_obj_t *label_list[10];
 
 #ifdef __cplusplus
 } /*extern "C"*/

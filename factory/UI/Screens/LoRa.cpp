@@ -51,14 +51,6 @@ static void scr1_item_create(const char *name, lv_event_cb_t cb)
     lv_obj_add_event_cb(obj, cb, LV_EVENT_CLICKED, NULL); 
 }
 
-static void scr1_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        // ui_full_refresh();
-        scr_mgr_pop(false);
-    }
-}
-
 static void create1(lv_obj_t *parent) 
 {
     scr1_list = lv_list_create(parent);
@@ -77,7 +69,7 @@ static void create1(lv_obj_t *parent)
     scr1_item_create("- Lora Setting", scr1_list_event);
 
     // back
-    scr_back_btn_create(parent, "Lora", scr1_btn_event_cb);
+    scr_back_btn_create(parent, "Lora", scr_btn_event_cb);
 }
 
 static void entry1(void) 
@@ -105,13 +97,6 @@ static lv_obj_t *lora_sw_btn_info;
 static lv_timer_t *lora_RT_timer = NULL;
 static lv_timer_t *lora_recv_timer = NULL;
 static int lora_cnt = 0;
-
-static void scr1_1_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
 
 static void lora_mode_sw_event(lv_event_t * e)
 {
@@ -223,7 +208,7 @@ static void create1_1(lv_obj_t *parent)
     lora_cnt = 0;
 
     // back
-    scr_back_btn_create(parent, ("Lora"), scr1_1_btn_event_cb);
+    scr_back_btn_create(parent, ("Lora"), scr_btn_event_cb);
 }
 static void entry1_1(void) 
 {
@@ -267,12 +252,6 @@ static lv_obj_t *dropdown_freq;
 static lv_obj_t *dropdown_band;
 static lv_obj_t *dropdown_power;
 
-static void scr1_2_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
 
 static void lora_setting_event_handler(lv_event_t * e)
 {
@@ -398,7 +377,7 @@ static void create1_2(lv_obj_t *parent)
     lv_obj_add_event_cb(dropdown_band, lora_setting_event_handler, LV_EVENT_VALUE_CHANGED, (void *)&band_flag);
     lv_obj_add_event_cb(dropdown_power,   lora_setting_event_handler, LV_EVENT_VALUE_CHANGED, (void *)&power_flag);
     // back
-    scr_back_btn_create(parent, ("Lora Setting"), scr1_2_btn_event_cb);
+    scr_back_btn_create(parent, ("Lora Setting"), scr_btn_event_cb);
 }
 static void entry1_2(void) 
 {

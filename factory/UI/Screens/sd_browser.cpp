@@ -15,13 +15,6 @@ const char* sd_browser_get_selected_file(void) {
     return selected;
 }
 
-static void scr7_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
-
 static void scr7_file_click_cb(lv_event_t *e)
 {
     char *path = (char*)lv_event_get_user_data(e);
@@ -98,7 +91,7 @@ static void create7(lv_obj_t *parent)
     lv_obj_set_style_pad_top(scr7_list, 5, LV_PART_MAIN);
     lv_obj_set_style_pad_row(scr7_list, 3, LV_PART_MAIN);
     
-    lv_obj_t *back7_label = scr_back_btn_create(parent, ("SD Card"), scr7_btn_event_cb);
+    lv_obj_t *back7_label = scr_back_btn_create(parent, ("SD Card"), scr_btn_event_cb);
 
 }
 

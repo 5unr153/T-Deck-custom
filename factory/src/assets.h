@@ -18,9 +18,9 @@ LV_IMG_DECLARE(img_batt)
 LV_IMG_DECLARE(img_test)
 LV_IMG_DECLARE(img_wifi)
 LV_IMG_DECLARE(img_A7682E)
-LV_IMG_DECLARE(img_PCM5102)
 LV_IMG_DECLARE(img_touch)
 LV_IMG_DECLARE(img_start)
+LV_IMG_DECLARE(img_win)
 
 
 // font

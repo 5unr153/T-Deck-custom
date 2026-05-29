@@ -5,12 +5,6 @@
 
 static lv_obj_t *scr2_1_cont;
 
-static void scr2_1_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
 
 static void create2_1(lv_obj_t *parent) 
 {
@@ -46,7 +40,7 @@ static void create2_1(lv_obj_t *parent)
     
     lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 35);
     
-    lv_obj_t *back2_1_label = scr_back_btn_create(parent, ("About System"), scr2_1_btn_event_cb);
+    lv_obj_t *back2_1_label = scr_back_btn_create(parent, ("About System"), scr_btn_event_cb);
 }
 static void entry2_1(void) 
 {
@@ -82,13 +76,6 @@ static ui_setting_handle setting_handle_list[] = {
 };
 
 static void setting_item_create(int curr_apge);
-
-static void scr2_btn_event_cb(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED){
-        scr_mgr_pop(false);
-    }
-}
 
 static void setting_scr_event(lv_event_t *e)
 {
@@ -263,7 +250,7 @@ static void create2(lv_obj_t *parent)
     lv_obj_set_style_text_color(setting_page, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(setting_page, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    scr_back_btn_create(parent, ("Setting"), scr2_btn_event_cb);
+    scr_back_btn_create(parent, ("Setting"), scr_btn_event_cb);
 }
 static void entry2(void) {
     ui_disp_full_refr();
