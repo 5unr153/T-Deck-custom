@@ -182,7 +182,7 @@ void sd_reader_set(int offset_mod);
 //#define MAX_LINES_ON_SCREEN ((SCREEN_HEIGHT_PX - 80) / FONT_HEIGHT_PX)  // ~9-10 строк
 #define MAX_LINES_ON_SCREEN 12
 // Максимальная длина строки (увеличивается при горизонтальном режиме)
-#define MAX_CHARS_PER_LINE 26
+#define MAX_CHARS_PER_LINE 30
 #define MAX_CHARS (MAX_CHARS_PER_LINE * MAX_LINES_ON_SCREEN)
 
 int sd_reader_read_lines(int max_lines, int max_chars, char *buffer, size_t buffer_size);

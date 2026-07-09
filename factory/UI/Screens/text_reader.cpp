@@ -104,13 +104,18 @@ static void reader_timer_event(lv_timer_t *t)
     if(ret > 0)
     {
         ui_input_set_keypay_flag();
-        if (keypay_v == 'p')
+        if (keypay_v == 'S')
         {
             reader_load_current_page();
         }
-                if (keypay_v == 'q')
+        if (keypay_v == 'b')
         {
             sd_reader_set(-MAX_CHARS*2);
+            reader_load_current_page();
+        }
+        if (keypay_v == 'r')
+        {
+            sd_reader_reset();
             reader_load_current_page();
         }
         sec = 0;
@@ -134,7 +139,7 @@ static void create_reader(lv_obj_t *parent)
     // Label для отображения текста (вместо textarea)
     reader_label = lv_label_create(parent);
     lv_obj_set_width(reader_label, LV_HOR_RES - 10);
-    lv_obj_set_height(reader_label, LV_VER_RES - 60);
+    lv_obj_set_height(reader_label, LV_VER_RES - 30);
     lv_obj_align(reader_label, LV_ALIGN_TOP_MID, 0, 20);
     lv_label_set_long_mode(reader_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(reader_label, FONT_BOLD_SIZE_14, LV_PART_MAIN);
@@ -145,40 +150,7 @@ static void create_reader(lv_obj_t *parent)
     selected_file_path = sd_browser_get_selected_file();
     scr_back_btn_create(parent, selected_file_path, reader_back_cb);
     
-    // Панель управления внизу
-    lv_obj_t *controls = lv_obj_create(parent);
-    lv_obj_set_size(controls, LV_HOR_RES, 40);
-    lv_obj_align(controls, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_border_width(controls, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(controls, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(controls, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(controls, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(controls, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(controls, LV_OBJ_FLAG_SCROLLABLE);
-    
-    // Кнопка Reset
-    lv_obj_t *reset_btn = lv_btn_create(controls);
-    lv_obj_set_size(reset_btn, 65, 35);
-    lv_obj_t *reset_label = lv_label_create(reset_btn);
-    lv_label_set_text(reset_label, "Reset");
-    lv_obj_center(reset_label);
-    lv_obj_add_event_cb(reset_btn, reader_reset_cb, LV_EVENT_CLICKED, NULL);
-    
-    lv_obj_t *back_btn = lv_btn_create(controls);
-    lv_obj_set_size(back_btn, 65, 35);
-    lv_obj_t *back_label = lv_label_create(back_btn);
-    lv_label_set_text(back_label, "<< Back");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_btn, reader_back_page_cb, LV_EVENT_CLICKED, NULL);
 
-
-    // Кнопка Next
-    lv_obj_t *next_btn = lv_btn_create(controls);
-    lv_obj_set_size(next_btn, 65, 35);
-    lv_obj_t *next_label = lv_label_create(next_btn);
-    lv_label_set_text(next_label, "Next >>");
-    lv_obj_center(next_label);
-    lv_obj_add_event_cb(next_btn, reader_next_page_cb, LV_EVENT_CLICKED, NULL);
 }
 
 static void entry_reader(void) 

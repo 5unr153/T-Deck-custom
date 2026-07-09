@@ -26,7 +26,7 @@ parser.add_argument('--symbols',
 					nargs='+',
 					metavar = 'sym',
 					default=[''],
-					help='Symbols to include. E.g. -s \Uc381c3 \U89c590'.encode('utf-8'))
+					help=u'Symbols to include. E.g. -s c381c3 89c590')
 parser.add_argument('--font',
 					metavar = 'file',
 					nargs='?',

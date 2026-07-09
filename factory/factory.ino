@@ -139,7 +139,7 @@ static bool ink_screen_init()
         }
 
         display.setCursor(x+20, y+20);
-        display.print(UI_T_DECK_PRO_VERSION);
+        display.print("5unr153 edition");
     }
     while (display.nextPage());
     display.powerOff();
@@ -651,7 +651,7 @@ void setup()
     peri_init_st[E_PERI_BQ27220]    = bq27220_init();
     peri_init_st[E_PERI_SD]         = sd_care_init();
     peri_init_st[E_PERI_GPS]        = gps_init();
-    peri_init_st[E_PERI_BHI260AP]   = BHI260AP_init();
+    // peri_init_st[E_PERI_BHI260AP]   = BHI260AP_init();
     peri_init_st[E_PERI_A7682E]     = A7682E_init();
 
     if(peri_init_st[E_PERI_A7682E] == false)

@@ -24,6 +24,7 @@ LV_IMG_DECLARE(img_win)
 
 
 // font
+LV_FONT_DECLARE(Font_Murs)
 LV_FONT_DECLARE(Font_Mono_Bold_14)
 LV_FONT_DECLARE(Font_Mono_Bold_15)
 LV_FONT_DECLARE(Font_Mono_Bold_16)
